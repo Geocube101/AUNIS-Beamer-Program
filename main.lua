@@ -14,7 +14,7 @@ for pname, _ in pairs(package.loaded) do
 end
 
 --local version = require('updater')
-local version = '1.0.0'
+local version = require('updater')
 local functions = require('functions')
 local beamerapi = require('beamer')
 local displayapi = require('display')
