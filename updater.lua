@@ -14,7 +14,11 @@ if component.isAvailable('internet') then
 	print('Checking for updates')
 	local url = vinfo.updateurl[1]:match( "^%s*(.-)%s*$" )
 	local target = shell.getWorkingDirectory()..'/beamer/data/versioninfo.kvp'
-	shell.execute('wget -fq '..url..info..' '..target)
+	local res, err = shell.execute('wget -fq '..url..info..' '..target)
+	
+	if res == false then
+		print('Failed to download version file: '..tostring(err))
+	end
 	
 	local vinfofile = kvpreader:open(shell.getWorkingDirectory()..'/beamer/data/versioninfo')
 	local newvinfo = vinfofile:read()
@@ -26,7 +30,11 @@ if component.isAvailable('internet') then
 		print('Updating '..tostring(#files)..' files')
 		for _, file in ipairs(files) do
 			print('Downloading file: '..file)
-			shell.execute('wget -fq '..url..file..' '..shell.getWorkingDirectory()..'/beamer/'..file)
+			local res, err = shell.execute('wget -fq '..url..file..' '..shell.getWorkingDirectory()..'/beamer/'..file)
+			if res == false then
+				print('Failed to download file: '..tostring(err))
+				return vinfo.version[1]:match( "^%s*(.-)%s*$" )
+			end
 		end
 		print('Update complete')
 	else
