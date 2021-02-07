@@ -37,19 +37,6 @@ local selectedbeamer
 local updateselected = false
 local gatestate = component.getPrimary('stargate').getGateStatus() == 'open'
 
-local togglecontrol = windowapi.Button(122, 9, 30, 4, 0x000000, 0x787878, 0x787878, 'Toggle Control State', function(b, p)
-	if selectedbeamer == nil then
-		return
-	end
-	
-	local cstate = beamercontrol[selectedbeamer][1]
-	cstate = (cstate == 'automatic' and 'manual' or 'automatic')
-	beamercontrol[selectedbeamer][1] = cstate
-	displayapi.setForegrounds(0xeeeeee)
-	displayapi.setBackgrounds(0x000000)
-	displayapi.fill(83, 41, 43, 1, ' ')
-	displayapi.set(84, 41, 'Control: '..cstate:gsub("^%l", string.upper))
-end)
 local togglestate = windowapi.Button(122, 15, 30, 4, 0x000000, 0x787878, 0x787878, 'Toggle State', function(b, p)
 	if selectedbeamer == nil then
 		return
@@ -61,6 +48,31 @@ local togglestate = windowapi.Button(122, 15, 30, 4, 0x000000, 0x787878, 0x78787
 	local state = not beamer.isActive()
 	
 	beamer.setActive(state)
+end)
+local togglecontrol = windowapi.Button(122, 9, 30, 4, 0x000000, 0x787878, 0x787878, 'Toggle Control State', function(b, p)
+	if selectedbeamer == nil then
+		return
+	end
+	
+	local cstate = beamercontrol[selectedbeamer][1]
+	local beamer = beamerapi.getBeamer(selectedbeamer)
+	cstate = (cstate == 'automatic' and 'manual' or 'automatic')
+	beamercontrol[selectedbeamer][1] = cstate
+	displayapi.setForegrounds(0xeeeeee)
+	displayapi.setBackgrounds(0x000000)
+	displayapi.fill(83, 41, 43, 1, ' ')
+	displayapi.set(84, 41, 'Control: '..cstate:gsub("^%l", string.upper))
+	
+	if cstate == 'manual' then
+		local newfg = (beamer.state and 0xff0000 or 0x00ff00)
+		togglestate.fg = newfg
+		togglestate.bd = newfg
+		togglestate:draw()
+	else
+		togglestate.fg = 0x787878
+		togglestate.bd = 0x787878
+		togglestate:draw()
+	end
 end)
 
 --Cleanup
@@ -122,10 +134,12 @@ local function updatebeamer(addr)
 	togglecontrol:draw()
 	
 	if gatestate == true then
-		local newfg = (beamer.state and 0xff0000 or 0x00ff00)
-		togglestate.fg = newfg
-		togglestate.bd = newfg
-		togglestate:draw()
+		if beamercontrol[addr][1] == 'manual' then
+			local newfg = (beamer.state and 0xff0000 or 0x00ff00)
+			togglestate.fg = newfg
+			togglestate.bd = newfg
+			togglestate:draw()
+		end
 	else
 		togglestate.fg = 0x787878
 		togglestate.bd = 0x787878
