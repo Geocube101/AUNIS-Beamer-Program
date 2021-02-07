@@ -69,7 +69,7 @@ local function begin(callback)
 		callback = callback or function() end
 		
 		for addr, ct in component.list() do
-			if ct == 'gpu' then
+			if ct == 'gpu' and component.proxy(addr).maxDepth() == 8 then
 				gpus[addr] = component.proxy(addr)
 			elseif ct == 'screen' and component.proxy(addr).isOn() == true then
 				screens[#screens + 1] = addr
