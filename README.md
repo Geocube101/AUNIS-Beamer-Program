@@ -1,5 +1,5 @@
 # AUNIS-Beamer-Program
-Opencomputers LUA program for the AUNIS mod beamer block
+Opencomputers LUA program for the AUNIS mod beamer block (Currently for AUNIS Mod <a href="https://github.com/MrJake222/AUNIS/releases" target="_blank">Alpha 1.9.12 2021-02-08</a>)
   
 ***
 ### Installation
