@@ -13,7 +13,6 @@ for pname, _ in pairs(package.loaded) do
 	loaded[pname] = true
 end
 
---local version = require('updater')
 local version = require('updater')
 local functions = require('functions')
 local beamerapi = require('beamer')
@@ -45,9 +44,7 @@ local togglestate = windowapi.Button(122, 15, 30, 4, 0x000000, 0x787878, 0x78787
 	end
 	
 	local beamer = component.proxy(selectedbeamer)
-	local state = not beamer.isActive()
-	
-	beamer.setActive(state)
+	beamer.setActive(not beamer.isActive())
 end)
 local togglecontrol = windowapi.Button(122, 9, 30, 4, 0x000000, 0x787878, 0x787878, 'Toggle Control State', function(b, p)
 	if selectedbeamer == nil then
@@ -64,10 +61,12 @@ local togglecontrol = windowapi.Button(122, 9, 30, 4, 0x000000, 0x787878, 0x7878
 	displayapi.set(84, 41, 'Control: '..cstate:gsub("^%l", string.upper))
 	
 	if cstate == 'manual' then
-		local newfg = (beamer.state and 0xff0000 or 0x00ff00)
-		togglestate.fg = newfg
-		togglestate.bd = newfg
-		togglestate:draw()
+		if gatestate == true then
+			local newfg = (beamer.state and 0xff0000 or 0x00ff00)
+			togglestate.fg = newfg
+			togglestate.bd = newfg
+			togglestate:draw()
+		end
 	else
 		togglestate.fg = 0x787878
 		togglestate.bd = 0x787878
@@ -101,16 +100,17 @@ local function updatebeamer(addr)
 	
 	displayapi.setForegrounds(0xeeeeee)
 	displayapi.setBackgrounds(0x000000)
-	displayapi.fill(83, 32, 43, 12, ' ')
+	displayapi.fill(83, 32, 69, 14, ' ')
 	displayapi.fill(12, 42, 47, 4, ' ')
 	displayapi.set(90, 33, '--[=[ Beamer Statistics ]=]--')
-	displayapi.set(84, 35, 'Address: '..addr:sub(0, 30)..'...')
+	displayapi.set(84, 35, 'Address: '..addr)
 	displayapi.set(13, 43, 'Address: '..addr)
 	displayapi.set(13, 44, 'Code: '..tostring(beamer.status_code)..' >> '..statuscodes[beamer.status_code + 1])
 	displayapi.set(84, 37, 'Mode: '..(beamer.type:gsub("^%l", string.upper)))
 	displayapi.set(84, 39, 'Role: '..(beamer.mode:gsub("^%l", string.upper)))
 	displayapi.set(84, 41, 'Control: '..beamercontrol[addr][1]:gsub("^%l", string.upper))
 	displayapi.set(84, 43, 'Buffer: '..(beamer.type ~= 'items' and beamer.type ~= 'none' and (tostring(beamer.current)..' / '..tostring(beamer.max)) or (beamer.type == 'none' and 'NULL' or 'ItemsList'))..' ('..percent..'%)')
+	displayapi.set(84, 45, 'Transfer: ('..(beamer.material ~= nil and beamer.material or 'NULL')..' @ '..beamer.transfer_additional..'mB / s) - '..beamer.amount_transferred..'mB')
 			
 	if beamer.type == 'power' then
 		displayapi.setBackgrounds(0xff5555)
@@ -151,7 +151,7 @@ end
 local function clearselectedbeamer()
 	displayapi.setForegrounds(0xeeeeee)
 	displayapi.setBackgrounds(0x000000)
-	displayapi.fill(83, 32, 43, 12, ' ')
+	displayapi.fill(83, 32, 69, 14, ' ')
 	displayapi.fill(12, 42, 47, 4, ' ')
 	displayapi.set(90, 33, '--[=[ Beamer Statistics ]=]--')
 	displayapi.set(84, 35, 'Address:')
@@ -159,9 +159,19 @@ local function clearselectedbeamer()
 	displayapi.set(84, 39, 'Role:')
 	displayapi.set(84, 41, 'Control:')
 	displayapi.set(84, 43, 'Buffer:')
+	displayapi.set(84, 45, 'Transfer:')
 	displayapi.set(22, 41, '--[=[ Beamer Status ]=]--')
 	displayapi.set(13, 43, 'Address:')
 	displayapi.set(13, 44, 'Code:')
+	
+	displayapi.setForegrounds(0x666666)
+	displayapi.setBackgrounds(0x555555)
+	displayapi.fill(93, 11, 14, 7, ' ')
+	displayapi.fill(93, 11, 14, 1, '▀')
+	displayapi.fill(93, 17, 14, 1, '▄')
+	displayapi.fill(93, 11, 1, 7, '█')
+	displayapi.fill(106, 11, 1, 7, '█')
+	
 	togglecontrol.fg = 0x787878
 	togglecontrol.bd = 0x787878
 	togglestate.fg = 0x787878
@@ -231,7 +241,7 @@ local function mainloop()
 			end
 		end)
 		
-		os.sleep(0.00001)
+		os.sleep(#beamerapi.getBeamers() > 0 and 0.00001 or 0.1)
 	end
 end
 
@@ -307,15 +317,20 @@ end
 
 --Stargate handler
 local function onstargateopen(eid, addr, caller, initiator)
-	gatestate = true
-	thread.create(function() beamcontrolmaster(initiator) end)
+	if gatestate == false then
+		gatestate = true
+		thread.create(function() beamcontrolmaster(initiator) end)
+	end
 end
 local function onstargateclose(eid, addr, caller, reason)
 	gatestate = false
-	for addr, _ in pairs(beamerapi.getBeamers()) do
+	for addr, bstate in pairs(beamerapi.getBeamers()) do
 		local beamer = component.proxy(addr)
 		beamer.setActive(false)
 		beamer.setBeamerRole('disabled')
+		beamerapi.setBeamerAmountTransferred(addr, 0)
+		bstate.material = nil
+		bstate.transfer_additional = 0
 	end
 end
 
@@ -324,9 +339,11 @@ local devm = displayapi.begin()
 local bevm = beamerapi.begin(setupbeamers)
 
 bevm.on('kill', function() displayapi.kill() end)
-bevm.on('beamer_add', function() updatebeamerbuttons(beamerapi.getBeamers()) end)
-bevm.on('beamer_delete', function(addr) updatebeamerbuttons(beamerapi.getBeamers()) if addr == selectedbeamer then clearselectedbeamer() end end)
-bevm.on('beamer_update', function(addr) if addr == selectedbeamer then updateselected = true end updatebeamerbuttons(beamerapi.getBeamers()) end)
+bevm.on('beamer_add', function(addr) beamercontrol[addr] = {'automatic'} updatebeamerbuttons(beamerapi.getBeamers()) end)
+bevm.on('beamer_delete', function(addr) updatebeamerbuttons(beamerapi.getBeamers()) if addr == selectedbeamer then clearselectedbeamer() end beamercontrol[addr] = nil end)
+bevm.on('beamer_update', function(addr) if addr == selectedbeamer then updateselected = true end end)
+bevm.on('state_change', function() updatebeamerbuttons(beamerapi.getBeamers()) end)
+bevm.on('transfer_change', function(addr, mat, amount) if addr == selectedbeamer then updateselected = true end end)
 devm.on('kill', cleanup)
 
 event.listen('touch', onclick)

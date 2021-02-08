@@ -4,9 +4,19 @@
 local component = require('component')
 local thread = require('thread')
 local event = require('event')
+local shell = require('shell')
+local functions = require('functions')
+local kvpreader = require('KeyValuePairFileReader')
 local beamers = {}
+local unassociated = {}
 local events = {}
 local state = false
+local configfile = kvpreader:open(shell.getWorkingDirectory()..'/beamer/data/config')
+local config = configfile:read()
+local force_control = functions.trim(config.force_control[1]) == 'true'
+local bsu_delay = tonumber(config.beamer_status_update_delay[1])
+
+configfile:close()
 
 --Event callback holder
 local eventmanager = {
@@ -47,9 +57,16 @@ end
 --Update connected beamer stats
 local function updatebeamer(addr)
 	local beamer = component.proxy(addr)
-	local bstate = {['state']=beamer.isActive(), ['type']=beamer.getBeamerMode(), ['current']=beamer.getBufferStored(), ['max']=beamer.getBufferCapacity(), ['mode']=beamer.getBeamerRole(), ['status']=beamer.getBeamerStatus(), ['status_code']=status_codes[beamer.getBeamerStatus()]}
+	local bstate = {['state']=beamer.isActive(), ['type']=beamer.getBeamerMode(), ['current']=beamer.getBufferStored(), ['max']=beamer.getBufferCapacity(), ['mode']=beamer.getBeamerRole(), ['status']=beamer.getBeamerStatus(), ['status_code']=status_codes[beamer.getBeamerStatus()], ['amount_transferred']=beamers[addr].amount_transferred, ['material']=beamers[addr].material, ['transfer_additional']=0}
 	local oldstate = beamers[addr]
 	local changed = false
+	
+	if beamer.getBeamerRedstoneMode() ~= 'ignored' and force_control == false then
+		unassociated[addr] = beamer.getBeamerRedstoneMode()
+		beamers[addr] = nil
+		call('beamer_delete', addr)
+		return
+	end
 	
 	if oldstate.state ~= bstate.state then
 		call('state_change', addr, beamer, bstate.state)
@@ -82,13 +99,44 @@ local function updatebeamer(addr)
 	end
 end
 
+--Update beamer transfer
+local function onbeamertransfer(eid, addr, _, t)
+	for mat, amount in pairs(t) do
+		beamers[addr].material = mat
+		beamers[addr].amount_transferred = beamers[addr].amount_transferred + amount
+		beamers[addr].transfer_additional = amount
+		call('transfer_change', addr, mat, amount)
+	end
+end
+
+--Check unassociated beamers rs control
+local function checkunassociatedbeamers()
+	for addr, rsc in pairs(unassociated) do
+		local beamer = component.proxy(addr)
+		if beamer.getBeamerRedstoneMode() == 'ignored' then
+			unassociated[addr] = nil
+			beamers[addr] = {['state']=beamer.isActive(), ['type']=beamer.getBeamerMode(), ['current']=beamer.getBufferStored(), ['max']=beamer.getBufferCapacity(), ['mode']=beamer.getBeamerRole(), ['status']=beamer.getBeamerStatus(), ['status_code']=status_codes[beamer.getBeamerStatus()], ['amount_transferred']=0, ['material']=nil, ['transfer_additional']=0}
+			call('beamer_add', addr)
+		end
+	end
+end
+
 --Add beamer to list
 local function addbeamer(eid, addr, ct)
 	if ct == 'beamer' then
 		local beamer = component.proxy(addr)
-		beamer.setActive(false)
-		beamers[addr] = {['state']=beamer.isActive(), ['type']=beamer.getBeamerMode(), ['current']=beamer.getBufferStored(), ['max']=beamer.getBufferCapacity(), ['mode']=beamer.getBeamerRole(), ['status']=beamer.getBeamerStatus(), ['status_code']=status_codes[beamer.getBeamerStatus()]}
-		call('beamer_add', addr)
+		if force_control == true then
+			beamer.setActive(false)
+			beamer.setBeamerRedstoneMode('ignored')
+			beamers[addr] = {['state']=beamer.isActive(), ['type']=beamer.getBeamerMode(), ['current']=beamer.getBufferStored(), ['max']=beamer.getBufferCapacity(), ['mode']=beamer.getBeamerRole(), ['status']=beamer.getBeamerStatus(), ['status_code']=status_codes[beamer.getBeamerStatus()], ['amount_transferred']=0, ['material']=nil, ['transfer_additional']=0}
+			call('beamer_add', addr)
+		elseif beamer.getBeamerRedstoneMode() == 'ignored' then
+			beamer.setActive(false)
+			beamers[addr] = {['state']=beamer.isActive(), ['type']=beamer.getBeamerMode(), ['current']=beamer.getBufferStored(), ['max']=beamer.getBufferCapacity(), ['mode']=beamer.getBeamerRole(), ['status']=beamer.getBeamerStatus(), ['status_code']=status_codes[beamer.getBeamerStatus()], ['amount_transferred']=0, ['material']=nil, ['transfer_additional']=0}
+			call('beamer_add', addr)
+		else
+			unassociated[addr] = beamer.getBeamerRedstoneMode()
+		end
 	end
 end
 
@@ -109,11 +157,15 @@ local function mainloop()
 		for addr, _ in pairs(beamers) do
 			updatebeamer(addr)
 		end
-		os.sleep(0.001)
+		if force_control == false then
+			checkunassociatedbeamers()
+		end
+		os.sleep(bsu_delay)
 	end
 	
 	event.ignore('component_added', addbeamer)
 	event.ignore('component_removed', delbeamer)
+	event.ignore('beamer_transfers', onbeamertransfer)
 	call('kill')
 end
 
@@ -125,8 +177,16 @@ local function begin(callback)
 		for addr, ct in component.list() do
 			if ct == 'beamer' then
 				local beamer = component.proxy(addr)
-				beamer.setActive(false)
-				beamers[addr] = {['state']=beamer.isActive(), ['type']=beamer.getBeamerMode(), ['current']=beamer.getBufferStored(), ['max']=beamer.getBufferCapacity(), ['mode']=beamer.getBeamerRole()}
+				if force_control == true then
+					beamer.setActive(false)
+					beamer.setBeamerRedstoneMode('ignored')
+					beamers[addr] = {['state']=beamer.isActive(), ['type']=beamer.getBeamerMode(), ['current']=beamer.getBufferStored(), ['max']=beamer.getBufferCapacity(), ['mode']=beamer.getBeamerRole(), ['amount_transferred']=0, ['material']=nil}
+				elseif beamer.getBeamerRedstoneMode() == 'ignored' then
+					beamer.setActive(false)
+					beamers[addr] = {['state']=beamer.isActive(), ['type']=beamer.getBeamerMode(), ['current']=beamer.getBufferStored(), ['max']=beamer.getBufferCapacity(), ['mode']=beamer.getBeamerRole(), ['amount_transferred']=0, ['material']=nil}
+				else
+					unassociated[addr] = beamer.getBeamerRedstoneMode()
+				end
 			end
 		end
 		
@@ -135,6 +195,7 @@ local function begin(callback)
 		callback(beamers)
 		state = true
 		thread.create(mainloop)
+		event.listen('beamer_transfers', onbeamertransfer)
 	end
 	
 	return eventmanager
@@ -147,5 +208,6 @@ return {
 	['kill']=function() state = false end,
 	['getBeamerAddresses']=function() local addresses = {} for addr, _ in pairs(beamers) do addresses[#addresses+1] = addr end return addresses end,
 	['getBeamers']=function() return beamers end,
-	['getBeamer']=function(address) return beamers[address] end
+	['getBeamer']=function(address) return beamers[address] end,
+	['setBeamerAmountTransferred']=function(address, amount) if beamers[address] ~= nil and amount >= 0 then beamers[address].amount_transferred = amount end end
 }
