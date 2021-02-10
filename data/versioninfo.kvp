@@ -1,3 +1,3 @@
-version=1.1.1
+version=1.1.2
 files=beamer.lua;display.lua;functions.lua;KeyValuePairFileReader.lua;main.lua;masterdisplay.lua;windowmanager.lua;data/config.kvp
 updateurl=https://raw.githubusercontent.com/Geocube101/AUNIS-Beamer-Program/main/
