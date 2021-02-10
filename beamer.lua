@@ -58,8 +58,9 @@ end
 local function updatebeamer(addr)
 	local beamer = component.proxy(addr)
 	local bstate = {['state']=beamer.isActive(), ['type']=beamer.getBeamerMode(), ['current']=beamer.getBufferStored(), ['max']=beamer.getBufferCapacity(), ['mode']=beamer.getBeamerRole(), ['status']=beamer.getBeamerStatus(), ['status_code']=status_codes[beamer.getBeamerStatus()], ['amount_transferred']=beamers[addr].amount_transferred, ['material']=beamers[addr].material, ['transfer_additional']=0}
-	local oldstate = beamers[addr]
+	local oldstate = functions.copy(beamers[addr])
 	local changed = false
+	beamers[addr] = bstate
 	
 	if beamer.getBeamerRedstoneMode() ~= 'ignored' and force_control == false then
 		unassociated[addr] = beamer.getBeamerRedstoneMode()
@@ -93,7 +94,6 @@ local function updatebeamer(addr)
 		changed = true
 	end
 	
-	beamers[addr] = bstate
 	if changed == true then
 		call('beamer_update', addr, beamer, bstate)
 	end

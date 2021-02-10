@@ -243,7 +243,6 @@ local function mainloop()
 			--Update selected
 			if selectedbeamer ~= nil and updateselected == true then
 				updatebeamer(selectedbeamer)
-				updatebeamerbuttons(beamerapi.getBeamers())
 				updateselected = false
 			end
 		end)
