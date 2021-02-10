@@ -49,7 +49,7 @@ end
 --Master loop
 local function mainloop()
 	while state == true do
-		os.sleep(0.001)
+		os.sleep(0)
 	end
 	
 	for _, mon in ipairs(monitors) do

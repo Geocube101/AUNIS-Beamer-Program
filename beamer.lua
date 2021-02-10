@@ -106,6 +106,7 @@ local function onbeamertransfer(eid, addr, _, t)
 		beamers[addr].amount_transferred = beamers[addr].amount_transferred + amount
 		beamers[addr].transfer_additional = amount
 		call('transfer_change', addr, mat, amount)
+		break
 	end
 end
 

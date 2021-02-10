@@ -223,15 +223,22 @@ end
 
 --Mainloop
 local function mainloop()
+	function showmemory()
+		while displayapi.getState() == true do
+			--Show memory
+			local total = computer.totalMemory()
+			local used = total - computer.freeMemory()
+			local percent = tostring(functions.round(used / total * 100))
+			displayapi.setForegrounds(0xeeeeee)
+			displayapi.setBackgrounds(0x000000)
+			displayapi.set(100, 3, 'Computer Memory: '..tostring(used)..' / '..tostring(total)..' ('..percent..'%)')
+			os.sleep(0.1)
+		end
+	end
+	
+	thread.create(showmemory)
+
 	while displayapi.getState() == true do
-		--Show memory
-		local total = computer.totalMemory()
-		local used = total - computer.freeMemory()
-		local percent = tostring(functions.round(used / total * 100))
-		displayapi.setForegrounds(0xeeeeee)
-		displayapi.setBackgrounds(0x000000)
-		displayapi.set(100, 3, 'Computer Memory: '..tostring(used)..' / '..tostring(total)..' ('..percent..'%)')
-		
 		pcall(function()
 			--Update selected
 			if selectedbeamer ~= nil and updateselected == true then
@@ -241,7 +248,7 @@ local function mainloop()
 			end
 		end)
 		
-		os.sleep(#beamerapi.getBeamers() > 0 and 0.00001 or 0.1)
+		os.sleep(0)
 	end
 end
 
@@ -311,7 +318,7 @@ local function beamcontrolmaster(state)
 				beamer.setActive(true)
 			end
 		end
-		os.sleep(0.001)
+		os.sleep(0)
 	end
 end
 
